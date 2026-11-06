@@ -19,11 +19,11 @@ vi.mock("babylon-lite", async (importOriginal) => {
         _gpu?: object;
         visible?: boolean;
     };
-    const cloneLite = (source: MockLiteNode): MockLiteNode => {
+    const cloneLite = (source: MockLiteNode, root = true): MockLiteNode => {
         const q = source.rotationQuaternion;
         const cloned = Object.assign(
             createTransformNode(
-                source.name + "_clone",
+                (root ? source.name + "_clone" : source.name),
                 source.position.x, source.position.y, source.position.z,
                 q.x, q.y, q.z, q.w,
                 source.scaling.x, source.scaling.y, source.scaling.z
@@ -36,7 +36,7 @@ vi.mock("babylon-lite", async (importOriginal) => {
         if ("material" in source) {
             cloned.material = source.material;
         }
-        cloned.children = source.children.map((child) => cloneLite(child as MockLiteNode));
+        cloned.children = source.children.map((child) => cloneLite(child as MockLiteNode, false));
         return cloned;
     };
     return {
