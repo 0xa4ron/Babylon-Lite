@@ -427,6 +427,12 @@ export class TransformNode extends Node {
             }
         }
         node.parent = liteParent;
+        // The raw Lite parent setter only updates world-matrix ancestry. Keep
+        // its explicit children registry in sync as well: clone traversal,
+        // scene removal and native hierarchy operations walk this array.
+        if (liteParent && !liteParent.children.includes(node)) {
+            liteParent.children.push(node);
+        }
     }
 
     /** @internal Remove this wrapper's node without letting Lite recurse for `dispose(true)`. */
