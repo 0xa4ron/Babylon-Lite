@@ -1,6 +1,9 @@
 import type { PickingInfo } from "./picking-info.js";
 import type { Mesh } from "../mesh/mesh.js";
 import { normalizeVec3TupleOrUp } from "../math/normalize-vec3-tuple-or-up.js";
+import { invertMat4 } from "../math/invert-mat4.js";
+import { multiplyMat4 } from "../math/multiply-mat4.js";
+import type { Mat4 } from "../math/types.js";
 
 /**
  * Get the interpolated normal at the picked point.
@@ -38,10 +41,30 @@ export function getPickedNormal(info: PickingInfo, useWorldCoordinates = false):
     const nz = info.bu * normals[i0 * 3 + 2]! + info.bv * normals[i1 * 3 + 2]! + bw * normals[i2 * 3 + 2]!;
 
     const localNormal = normalizeVec3TupleOrUp(nx, ny, nz);
-    const wm = mi.worldMatrix;
-    const wnx = wm[0]! * localNormal[0] + wm[4]! * localNormal[1] + wm[8]! * localNormal[2];
-    const wny = wm[1]! * localNormal[0] + wm[5]! * localNormal[1] + wm[9]! * localNormal[2];
-    const wnz = wm[2]! * localNormal[0] + wm[6]! * localNormal[1] + wm[10]! * localNormal[2];
+    // GPU-picked faces may have barycentrics but no cached surface normal.
+    // Transform their CPU-interpolated normal with the inverse-transpose,
+    // not the world 3x3 (which is wrong under non-uniform scale or shear).
+    let world = mi.worldMatrix;
+    if (info.thinInstanceIndex >= 0) {
+        const matrices = mi.thinInstances?.matrices;
+        const offset = info.thinInstanceIndex * 16;
+        if (!matrices || !Number.isInteger(offset) || offset + 16 > matrices.length) {
+            return null;
+        }
+        // The instance transform is local to the mesh: world * instance.
+        // Copy rather than mutate the caller's shared thin-instance buffer.
+        const instance = new Float32Array(matrices.subarray(offset, offset + 16));
+        instance[3] = instance[7] = instance[11] = 0;
+        instance[15] = 1;
+        world = multiplyMat4(world, instance as unknown as Mat4);
+    }
+    const inverse = invertMat4(world);
+    if (!inverse) {
+        return null; // A singular world transform has no defined world-space surface normal.
+    }
+    const wnx = inverse[0]! * localNormal[0] + inverse[1]! * localNormal[1] + inverse[2]! * localNormal[2];
+    const wny = inverse[4]! * localNormal[0] + inverse[5]! * localNormal[1] + inverse[6]! * localNormal[2];
+    const wnz = inverse[8]! * localNormal[0] + inverse[9]! * localNormal[1] + inverse[10]! * localNormal[2];
     const worldNormal = normalizeVec3TupleOrUp(wnx, wny, wnz);
     const flip = info.ray ? worldNormal[0] * info.ray.direction[0] + worldNormal[1] * info.ray.direction[1] + worldNormal[2] * info.ray.direction[2] > 0 : false;
 
