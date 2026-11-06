@@ -78,8 +78,7 @@ describe("getPickedNormal for GPU-picked barycentric fallback", () => {
         const hit = fakeGpuHit(scale(1, 1, 1));
         hit.thinInstanceIndex = 0;
         expect(getPickedNormal(hit, true)).toBeNull();
-        hit.thinInstanceIndex = -1;
-        (hit.pickedMesh as Mesh).worldMatrix = scale(0, 1, 1);
-        expect(getPickedNormal(hit, true)).toBeNull();
+        const singular = fakeGpuHit(scale(0, 1, 1));
+        expect(getPickedNormal(singular, true)).toBeNull();
     });
 });
