@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { cloneTransformNode } from "babylon-lite";
 
 import { MeshBuilder, NullEngine, Scene, TransformNode } from "../src/index";
 
@@ -65,5 +66,60 @@ describe("node.parent = … releases the previous Lite parent", () => {
 
         expect(box._lite.parent).toBeNull();
         expect(liteMeshes(scene)).toContain(box._lite);
+    });
+});
+
+describe("direct parent assignment maintains native Lite child registries", () => {
+    it("adds children to the new parent and removes them from the old one", () => {
+        const first = new TransformNode("first");
+        const second = new TransformNode("second");
+        const child = new TransformNode("child");
+        child.position.set(1, 2, 3);
+
+        child.parent = first;
+        expect(liteChildren(first)).toEqual([child._node]);
+        expect(child._node.parent).toBe(first._node);
+
+        child.parent = second;
+        expect(liteChildren(first)).toEqual([]);
+        expect(liteChildren(second)).toEqual([child._node]);
+        expect(child._node.parent).toBe(second._node);
+        expect(child.position.asArray()).toEqual([1, 2, 3]);
+
+        child.parent = null;
+        expect(liteChildren(second)).toEqual([]);
+        expect(child._node.parent).toBeNull();
+    });
+
+    it("does not duplicate native children on repeated assignments or a setParent transition", () => {
+        const first = new TransformNode("first");
+        const second = new TransformNode("second");
+        const child = new TransformNode("child");
+
+        child.parent = first;
+        child.parent = first;
+        expect(liteChildren(first)).toEqual([child._node]);
+
+        child.setParent(second);
+        expect(liteChildren(first)).toEqual([]);
+        expect(liteChildren(second)).toEqual([child._node]);
+        child.parent = first;
+        expect(liteChildren(second)).toEqual([]);
+        expect(liteChildren(first)).toEqual([child._node]);
+    });
+
+    it("keeps a directly parented subtree visible to native Lite hierarchy cloning", () => {
+        const root = new TransformNode("root");
+        const group = new TransformNode("group");
+        const child = new TransformNode("child");
+
+        group.parent = root;
+        child.parent = group;
+        const nativeClone = cloneTransformNode(root._node);
+
+        expect(nativeClone.children).toHaveLength(1);
+        expect(nativeClone.children[0]!.name).toBe("group_clone");
+        expect(nativeClone.children[0]!.children).toHaveLength(1);
+        expect(nativeClone.children[0]!.children[0]!.name).toBe("child_clone");
     });
 });
