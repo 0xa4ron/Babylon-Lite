@@ -349,8 +349,8 @@ export class TransformNode extends Node {
         // preserves world). Mirror that with Babylon Lite's raw parent assignment.
         const node = this._node;
         const liteParent = liteNodeOf(parent);
-        // Leave the previous Lite parent's `children`, as Lite's `setParent` does: removing that parent walks the
-        // list and would otherwise take this node out of the scene with it.
+        // Like Lite's setParent, remove the child from the old parent's registry:
+        // disposing that parent must not remove an already-reparented descendant.
         const previous = node.parent as SceneNode | null;
         if (previous && previous !== liteParent) {
             const siblings = previous.children;
@@ -360,6 +360,12 @@ export class TransformNode extends Node {
             }
         }
         node.parent = liteParent;
+        // The raw Lite parent setter only updates world-matrix ancestry. Keep
+        // its explicit children registry in sync as well: clone traversal,
+        // scene removal and native hierarchy operations walk this array.
+        if (liteParent && !liteParent.children.includes(node)) {
+            liteParent.children.push(node);
+        }
     }
 
     /** @internal Remove this wrapper's node without letting Lite recurse for `dispose(true)`. */
